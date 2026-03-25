@@ -1,0 +1,69 @@
+//> Chunks of Bytecode chunk-c
+#include <stdlib.h>
+
+#include "chunk.h"
+#include "memory.h"
+
+
+void initChunk(Chunk* chunk) {
+  chunk->count = 0;
+  chunk->capacity = 0;
+  chunk->code = NULL;
+  chunk->lineEntries = NULL;
+  chunk->lineEntryCount = 0;
+  chunk->lineEntryCapacity = 0;
+  initValueArray(&chunk->constants);
+}
+
+void freeChunk(Chunk* chunk) {
+  FREE_ARRAY(uint8_t, chunk->code, chunk->capacity);
+  FREE_ARRAY(LineEntry, chunk->lineEntries, chunk->lineEntryCapacity);
+  freeValueArray(&chunk->constants);
+  initChunk(chunk);
+}
+
+void writeChunk(Chunk* chunk, uint8_t byte, int line) {
+  if (chunk->capacity < chunk->count + 1) {
+    int oldCapacity = chunk->capacity;
+    chunk->capacity = GROW_CAPACITY(oldCapacity);
+    chunk->code = GROW_ARRAY(uint8_t, chunk->code,
+        oldCapacity, chunk->capacity);
+  }
+
+  chunk->code[chunk->count] = byte;
+  chunk->count++;
+
+  if (chunk->lineEntryCount > 0 &&
+      chunk->lineEntries[chunk->lineEntryCount - 1].line == line) {
+    chunk->lineEntries[chunk->lineEntryCount - 1].count++;
+    return;
+  }
+
+  if (chunk->lineEntryCapacity < chunk->lineEntryCount + 1) {
+    int oldCapacity = chunk->lineEntryCapacity;
+    chunk->lineEntryCapacity = GROW_CAPACITY(oldCapacity);
+    chunk->lineEntries = GROW_ARRAY(LineEntry, chunk->lineEntries,
+        oldCapacity, chunk->lineEntryCapacity);
+  }
+
+  LineEntry* entry = &chunk->lineEntries[chunk->lineEntryCount++];
+  entry->line = line;
+  entry->count = 1;
+}
+
+int getLine(Chunk* chunk, int instruction) {
+  int offset = 0;
+  for (int i = 0; i < chunk->lineEntryCount; i++) {
+    if (instruction < offset + chunk->lineEntries[i].count) {
+      return chunk->lineEntries[i].line;
+    }
+    offset += chunk->lineEntries[i].count;
+  }
+  return -1;
+}
+//> add-constant
+int addConstant(Chunk* chunk, Value value) {
+  writeValueArray(&chunk->constants, value);
+  return chunk->constants.count - 1;
+}
+//< add-constant
